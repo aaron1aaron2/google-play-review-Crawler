@@ -10,15 +10,15 @@ import pandas as pd
 from multiprocessing import Pool
 
 from crawler import start_worker
-from IPython import embed
 
 class Crawler:
-    def __init__(self, output_folder, file_path, chunk_size):
+    def __init__(self, output_folder, file_path, chunk_size, file_name):
         self.mkdir(output_folder)
         self.chunk_size = chunk_size
         self.output_folder = output_folder
-        self.input = pd.read_csv(file_path)
+        self.input = pd.read_csv(file_path).head(20) # 只取前20
         self.target_ls = self.input.to_dict(orient='records')
+        self.filename = file_name
         
 
     def check_data(self):
@@ -28,14 +28,16 @@ class Crawler:
         path = self.output_folder+'/main.csv'
         if os.path.exists(path):
             df = pd.read_csv(path)
-            self.target_ls = [i for i in self.target_ls if i not in df['name'].values]
+            self.target_ls = [i for i in self.target_ls if i['name'] not in df['name'].values]
             print('Read last progress in file -> {} \nHas been completed -> {} \nRemaining tasks -> {}'.format(path, len(df), len(self.target_ls)))
         else:
             print('No data in output folder!')
+        time.sleep(5)
 
     def mkdir(self, path):
         if not os.path.exists(path):
             os.makedirs(path)
+
     def _to_json_append(self, df, file_path):
         '''
         Load the file with
@@ -52,8 +54,9 @@ class Crawler:
         f.close()
 
     def output_data(self, data:list):
+        data = [i for i in data if i['comment']!=None]
         df = pd.DataFrame(data)
-        path = self.output_folder+'/main.csv'
+        path = '{}/{}.csv'.format(self.output_folder, self.filename)
         usecols = df.columns.to_list()
         usecols.remove('comment')
         if os.path.exists(path):
@@ -61,7 +64,7 @@ class Crawler:
         else:
             df[usecols].to_csv(path, index=False)
 
-        path = self.output_folder+'/main.json'
+        path = '{}/{}.json'.format(self.output_folder, self.filename)
         if os.path.exists(path):
             self._to_json_append(df, path)
             # with open(path, mode = 'a+', encoding='utf-8') as f:
@@ -70,15 +73,15 @@ class Crawler:
             with open(path, mode = 'w', encoding='utf-8') as f:
                 df.to_json(f, lines=True, orient='records', force_ascii=False)
 
-    def run(self):
-        # embed()
+    def run(self, result = []):
+        self.check_data()
         num = int(len(self.target_ls)/self.chunk_size) + 1
         for i in range(num):
             l = i*self.chunk_size
             r = (i+1)*self.chunk_size
             
             p = Pool() # Pool() 不放參數則默認使用電腦核的數量
-            if i == num-1:
+            if i+1 == num-1:
                 result = p.map(start_worker,self.target_ls[l:])
             else:
                 result = p.map(start_worker,self.target_ls[l:r])
@@ -86,17 +89,37 @@ class Crawler:
             p.close()
             p.join()
             
-            print('Current progress: {}/{}'.format(i,num-1))
-            try:
-                self.output_data(result)
-            except:
-                print('data output error')
+            print('Current progress: {}/{}'.format(i+1,num-1))
+            if result != []:
+	            try:
+	                self.output_data(result)
+	                print('data output success !')
+	            except:
+	                print('data output error')
+
 
 
 if __name__ == "__main__":
+    # Crawler = Crawler(
+    #     file_path = 'data/Top50_free_game_rankings.csv',
+    #     output_folder = 'output',
+    #     file_name = 'Top50_free_game_rankings',
+    #     chunk_size = 20
+    # )
+    # Crawler.run()
+
+    # Crawler = Crawler(
+    #     file_path = 'data/Top50_paid_games_rankings.csv',
+    #     output_folder = 'output',
+    #     file_name = 'Top50_paid_games_rankings',
+    #     chunk_size = 20
+    # )
+    # Crawler.run()
+
     Crawler = Crawler(
-        file_path = 'data/game_basic_list.csv',
+        file_path = 'data/Top50_revenue_games_rankings.csv',
         output_folder = 'output',
-        chunk_size = 10
+        file_name = 'Top50_revenue_games_rankings',
+        chunk_size = 20
     )
     Crawler.run()
